@@ -83,8 +83,9 @@ public class WasmGCSupertypeFunctionGenerator implements WasmGCSupertypeFunction
             if (type instanceof ValueType.Object) {
                 var className = ((ValueType.Object) type).getClassName();
                 generateIsClass(subtypeVar, className, function);
+            } else if (type instanceof ValueType.Array) {
+                generateIsArrayOfType(subtypeVar, (ValueType.Array) type, function);
             } else {
-                assert !(type instanceof ValueType.Array);
                 var expected = classGenerator.getClassInfo(type).pointer;
                 function.getBody().builder()
                         .getLocal(subtypeVar)
@@ -134,6 +135,25 @@ public class WasmGCSupertypeFunctionGenerator implements WasmGCSupertypeFunction
         }
 
         body.i32Const(1);
+    }
+
+    private void generateIsArrayOfType(WasmLocal subtypeVar, ValueType.Array type, WasmFunction function) {
+        var itemType = type.getItemType();
+        var classInfoType = classGenerator.reflectionTypes().classInfo();
+        int itemOffset = classInfoType.itemTypeIndex();
+
+        var body = function.getBody().builder();
+        body.getLocal(subtypeVar).structGet(classInfoType.structure(), itemOffset).setLocal(subtypeVar);
+
+        body.getLocal(subtypeVar).isNull();
+        var itemTest = body.conditional(WasmType.INT32);
+        itemTest.getThenBlock().builder().i32Const(0);
+
+        var itemClassInfo = classGenerator.getClassInfo(itemType);
+        itemTest.getElseBlock().builder()
+                .getLocal(subtypeVar)
+                .getGlobal(itemClassInfo.pointer)
+                .call(getIsSupertypeFunction(itemType));
     }
 
     WasmFunction getIsArraySupertypeFunction() {
